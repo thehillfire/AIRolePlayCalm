@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "loreforge-backend",
+    "slug": "loreforge-backend",
+    "version": "1.0.0",
+    "description": "",
+    "sdkVersion": "50.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "android": {
+      "package": "com.anonymous.loreforgebackend"
+    }
+  }
+}

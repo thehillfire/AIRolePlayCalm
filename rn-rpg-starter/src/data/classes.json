@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Shadow Assassin",
+    "rarity": "Legendary",
+    "description": "A master of stealth and poison, capable of eliminating targets without being detected.",
+    "isActive": true
+  },
+  {
+    "name": "Arcane Scholar",
+    "rarity": "Epic",
+    "description": "A brilliant mage who has mastered the ancient arts of elemental manipulation.",
+    "isActive": true
+  },
+  {
+    "name": "Forest Ranger",
+    "rarity": "Uncommon",
+    "description": "A skilled hunter who can track any creature through the wilderness.",
+    "isActive": true
+  },
+  {
+    "name": "Village Blacksmith",
+    "rarity": "Common",
+    "description": "A hardworking crafter who can forge weapons and armor from raw materials.",
+    "isActive": true
+  },
+  {
+    "name": "Dragon Slayer",
+    "rarity": "Mythical",
+    "description": "A legendary warrior blessed with the power to defeat the mightiest dragons.",
+    "isActive": true
+  },
+  {
+    "name": "Frost Mage",
+    "rarity": "Rare",
+    "description": "A spellcaster who harnesses the power of ice and snow to freeze enemies.",
+    "isActive": true
+  },
+  {
+    "name": "Celestial Priest",
+    "rarity": "Celestial",
+    "description": "A divine healer blessed by the gods with incredible restoration powers.",
+    "isActive": true
+  },
+  {
+    "name": "Tavern Keeper",
+    "rarity": "Common",
+    "description": "A friendly innkeeper who knows all the local gossip and stories.",
+    "isActive": true
+  },
+  {
+    "name": "Storm Caller",
+    "rarity": "Epic",
+    "description": "A powerful sorcerer who can summon lightning and control the weather.",
+    "isActive": true
+  },
+  {
+    "name": "Shadow Walker",
+    "rarity": "Rare",
+    "description": "A mysterious figure who can move between dimensions and phase through walls.",
+    "isActive": true
+  }
+]

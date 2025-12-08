@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "LoreForge RPG",
+    "slug": "loreforge-rpg",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "loreforge",
+    "sdkVersion": "54.0.0",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0F1A"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "updates": {
+      "enabled": false,
+      "checkOnLaunch": "never"
+    },
+    "ios": { 
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptiveicon.png",
+        "backgroundColor": "#0B0F1A"
+      }
+    },
+    "web": { 
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

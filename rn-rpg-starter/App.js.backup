@@ -1,0 +1,1061 @@
+import 'react-native-gesture-handler';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, StyleSheet, Pressable, FlatList, ActivityIndicator, Switch, Alert } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { AuthProvider } from './src/context/AuthContext';
+import { useAuth } from './src/hooks/useAuth';
+import { useGemini } from './src/hooks/useGemini';
+import ChatModal from './src/components/ChatModal';
+import MenuModal from './src/components/MenuModal';
+
+// Animated Loading Screen Component
+function LoadingScreen() {
+  const [dots, setDots] = useState('');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((prev) => {
+        if (prev === '...') return '';
+        return prev + '.';
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View style={[styles.container, styles.loadingContainer]}>
+      <Text style={styles.loadingTitle}>LoreForge RPG</Text>
+      <Text style={styles.loadingText}>Loading{dots}</Text>
+    </View>
+  );
+}
+
+// Simple login screen
+function SimpleLoginScreen() {
+  const { signInWithEmail, signUpWithEmail, signInAnonymously } = useAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState('login');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    if (!username.trim()) {
+      setError('Username is required');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      if (mode === 'login') {
+        await signInWithEmail(username, password);
+      } else {
+        await signUpWithEmail(username, password);
+      }
+    } catch (err) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await signInAnonymously();
+    } catch (err) {
+      setError(err.message || 'Guest login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>LoreForge RPG</Text>
+      <Text style={styles.subtitle}>Enter your realm, adventurer</Text>
+
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+      <TextInput
+        style={styles.input}
+        placeholder="Username or Email"
+        placeholderTextColor="#9CA3AF"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+        editable={!loading}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        placeholderTextColor="#9CA3AF"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        editable={!loading}
+      />
+
+      <Pressable 
+        style={[styles.button, loading && styles.disabledButton]} 
+        onPress={handleSubmit}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>
+            {mode === 'login' ? 'Sign In' : 'Create Account'}
+          </Text>
+        )}
+      </Pressable>
+
+      <Pressable 
+        style={[styles.button, styles.ghostButton]} 
+        onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}
+        disabled={loading}
+      >
+        <Text style={styles.ghostText}>
+          {mode === 'login' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+        </Text>
+      </Pressable>
+      <Pressable 
+        style={[styles.button, styles.secondaryButton, loading && styles.disabledButton]} 
+        onPress={handleGuestLogin}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Loading...' : 'Continue as Guest'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// Simple game screen for RPG class rolling
+function GameScreen({ onBack }) {
+  console.log('🎮 GameScreen component loaded');
+  
+  const [hasGeneratedClass, setHasGeneratedClass] = useState(false);
+  const [generatedClass, setGeneratedClass] = useState(null);
+  const [showClassDisplay, setShowClassDisplay] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbError, setDbError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [useAI, setUseAI] = useState(false);
+  const [chatVisible, setChatVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+function LoadingScreen() {
+  const [dots, setDots] = useState('');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((prev) => {
+        if (prev === '...') return '';
+        return prev + '.';
+      });
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <View style={[styles.container, styles.loadingContainer]}>
+      <Text style={styles.loadingTitle}>LoreForge RPG</Text>
+      <Text style={styles.loadingText}>Loading{dots}</Text>
+    </View>
+  );
+}
+
+// Simple login screen without theme dependencies
+function SimpleLoginScreen() {
+  const { signInWithEmail, signUpWithEmail, signInAnonymously } = useAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState('login');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const validateForm = () => {
+    // Check if username is provided
+    if (!username.trim()) {
+      setError('Username is required');
+      return false;
+    }
+
+    // Username length validation
+    if (username.trim().length < 3) {
+      setError('Username must be at least 3 characters long');
+      return false;
+    }
+
+    // Check if password is provided
+    if (!password) {
+      setError('Password is required');
+      return false;
+    }
+
+    // Password length validation - 10 characters for both login and signup
+    if (password.length < 10) {
+      setError('Password must be at least 10 characters long');
+      return false;
+    }
+
+    return true;
+  };
+
+  const onSubmit = async () => {
+    setError('');
+    
+    // Validate form before proceeding
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (mode === 'login') {
+        console.log('Attempting login with:', username);
+        await signInWithEmail(username, password);
+      } else {
+        console.log('Attempting signup with:', username);
+        await signUpWithEmail(username, password);
+      }
+    } catch (err) {
+      console.error('Authentication error:', err);
+      setError(err.message || 'Authentication failed');
+    }
+    setLoading(false);
+  };
+
+  const handleGuestLogin = async () => {
+    console.log('🔵 handleGuestLogin: Starting...');
+    setLoading(true);
+    setError('');
+    
+    try {
+      console.log('🔵 handleGuestLogin: Calling signInAnonymously...');
+      const result = await signInAnonymously();
+      console.log('🟢 handleGuestLogin: Success!', result);
+    } catch (err) {
+      console.error('🔴 handleGuestLogin: Error caught:', err);
+      setError(err.message || 'Guest login failed');
+    } finally {
+      console.log('🔵 handleGuestLogin: Setting loading to false');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>LoreForge RPG</Text>
+      
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Username"
+        placeholderTextColor="#99A0AE"
+        autoCapitalize="none"
+        autoComplete="username"
+        value={username}
+        onChangeText={setUsername}
+        editable={!loading}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Password (min 10 characters)"
+        placeholderTextColor="#99A0AE"
+        secureTextEntry
+        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+        value={password}
+        onChangeText={setPassword}
+        editable={!loading}
+      />
+      <Pressable 
+        style={[styles.button, loading && styles.disabledButton]} 
+        onPress={onSubmit}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Loading...' : (mode === 'login' ? 'Sign In' : 'Create Account')}
+        </Text>
+      </Pressable>
+      <Pressable 
+        style={[styles.button, styles.ghostButton]} 
+        onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}
+        disabled={loading}
+      >
+        <Text style={styles.ghostText}>
+          {mode === 'login' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
+        </Text>
+      </Pressable>
+      <Pressable 
+        style={[styles.button, styles.secondaryButton, loading && styles.disabledButton]} 
+        onPress={handleGuestLogin}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Loading...' : 'Continue as Guest'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// Simple game screen for RPG class rolling
+function GameScreen({ onBack }) {
+  const [hasGeneratedClass, setHasGeneratedClass] = useState(false);
+  const [generatedClass, setGeneratedClass] = useState(null);
+  const [showClassDisplay, setShowClassDisplay] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbError, setDbError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [useAI, setUseAI] = useState(false); // Database first, AI as option
+  const [chatVisible, setChatVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  
+  const { signOut } = useAuth();
+  const { 
+    generateClass, 
+    isConfigured: isBackendConfigured, 
+    isConnected: isBackendConnected,
+    loading: geminiLoading, 
+    error: geminiError, 
+    backendStatus,
+    initialize: initializeGemini 
+  } = useGemini();
+
+  // Initialize connection but don't load classes until user requests
+  useEffect(() => {
+    initializeDatabaseConnection();
+    initializeGemini();
+  }, []);
+
+  const loadClassesFromDatabase = async () => {
+    setIsLoading(true);
+    setDbError(null);
+    
+    try {
+      // Import database functions dynamically
+      const { getAllClasses, testFirebaseConnection, initializeClassesDatabase } = await import('./src/services/firestore');
+      
+      // DIAGNOSTIC: Test Firebase connection first
+      console.log('🔍 DIAGNOSTIC: Testing your Firebase connection...');
+      const connectionTest = await testFirebaseConnection();
+      console.log('� Connection test result:', connectionTest);
+      
+      // Check if database is initialized
+      const initResult = await initializeClassesDatabase();
+      console.log('📋 Init result:', initResult);
+      
+      if (!initResult.success) {
+        throw new Error(initResult.error || initResult.message || 'Database initialization failed');
+      }
+      
+      // Fetch classes from Firebase
+      const fetchedClasses = await getAllClasses();
+      setClasses(fetchedClasses);
+      setIsInitialized(true);
+      console.log(`✅ Loaded ${fetchedClasses.length} classes from Firebase database`);
+    } catch (error) {
+      console.error('❌ DIAGNOSTIC: Database connection failed:', error);
+      setDbError(`Database error: ${error.message}`);
+      setClasses([]);
+      console.log('🔄 Starting with empty classes array due to error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const initializeDatabaseConnection = async () => {
+    setDbError(null);
+    
+    try {
+      // Import database functions dynamically
+      const { testFirebaseConnection, initializeClassesDatabase } = await import('./src/services/firestore');
+      
+      // Test Firebase connection
+      console.log('🔍 Testing Firebase connection...');
+      const connectionTest = await testFirebaseConnection();
+      console.log('📊 Connection test result:', connectionTest);
+      
+      // Check if database is initialized
+      const initResult = await initializeClassesDatabase();
+      console.log('📋 Database status:', initResult);
+      
+      if (!initResult.success) {
+        throw new Error(initResult.error || initResult.message || 'Database initialization failed');
+      }
+      
+      setIsInitialized(true);
+      console.log(`✅ Database ready: ${connectionTest.themes} themes × ${connectionTest.roles} roles available`);
+    } catch (error) {
+      console.error('❌ Database connection failed:', error);
+      setDbError(`Database error: ${error.message}`);
+      setIsInitialized(false);
+    }
+  };
+
+  const rollRandomClass = async () => {
+    if (isLoading || geminiLoading || hasGeneratedClass) return;
+    
+    setIsLoading(true);
+    setDbError(null);
+    
+    try {
+      let newClass;
+      
+      if (useAI && isBackendConfigured && isBackendConnected) {
+        // Use AI generation
+        console.log('🤖 Generating your one and only class via AI...');
+        newClass = await generateClass();
+        if (!newClass) {
+          throw new Error(geminiError || 'Failed to generate AI class');
+        }
+        console.log('🎲 AI Generated class:', newClass.name, `(${newClass.rarity})`);
+      } else if (isInitialized) {
+        // Generate ONE random class from your seeded database
+        console.log('🎲 Generating your one and only class from seeded database...');
+        const { getRandomClass } = await import('./src/services/firestore');
+        newClass = await getRandomClass();
+        console.log('🎲 Generated:', newClass.name, `(${newClass.rarity})`);
+      } else {
+        throw new Error('Database not initialized. Please wait and try again.');
+      }
+      
+      if (newClass) {
+        // Mark that the player has generated their class
+        setHasGeneratedClass(true);
+        setGeneratedClass(newClass);
+        setShowClassDisplay(true);
+        
+        console.log(`✅ Generated your class: "${newClass.name}"`);
+        console.log('🎯 Full class data:', JSON.stringify(newClass, null, 2));
+        console.log('🎯 Setting showClassDisplay to true');
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to generate random class:', error);
+      setDbError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const showBackendSetupInfo = () => {
+    Alert.alert(
+      'Backend Setup Required',
+      'AI generation requires a secure backend to protect your API key. Please check the BACKEND_SETUP.md file for instructions on setting up your secure server.',
+      [
+        { text: 'OK', style: 'default' }
+      ]
+    );
+  };
+
+  const getRarityColor = (rarity) => {
+    switch (rarity.toLowerCase()) {
+      case 'legendary': return '#FFD700';
+      case 'epic': return '#9945FF';
+      case 'rare': return '#0099FF';
+      case 'uncommon': return '#10B981';
+      default: return '#6B7280';
+    }
+  };
+
+  // If showing class display, render that instead
+  if (showClassDisplay && generatedClass) {
+    return <ClassDisplayComponent classData={generatedClass} onBack={() => setShowClassDisplay(false)} />;
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: '#0B0F1A' }]}>
+      <View style={styles.gameHeader}>
+        <Pressable style={styles.backButton} onPress={onBack}>
+          <Text style={styles.backButtonText}>← Back</Text>
+        </Pressable>
+        <Text style={styles.title}>Adventure Roll</Text>
+        <Pressable 
+          style={styles.hamburgerButton} 
+          onPress={() => setMenuVisible(true)}
+        >
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+        </Pressable>
+      </View>
+
+      {/* Database Status */}
+      <View style={styles.dbStatusContainer}>
+        {useAI && isBackendConfigured ? (
+          <Text style={styles.dbStatusText}>
+            🤖 AI Mode • Secure Backend {isBackendConnected ? '✅' : '❌'}
+          </Text>
+        ) : hasGeneratedClass ? (
+          <Text style={styles.dbStatusText}>
+            🎯 Class Generated! • Check your class screen to see your adventure
+          </Text>
+        ) : isInitialized ? (
+          <Text style={styles.dbStatusText}>
+            🔥 Your Seeded Database • 520 themes × 240 roles = 124,800 combinations ✅
+          </Text>
+        ) : (
+          <Text style={styles.dbStatusText}>
+            📱 Loading Database • Connecting to your seeded data...
+          </Text>
+        )}
+        {(dbError || geminiError) && (
+          <Text style={styles.dbErrorText}>⚠️ {dbError || geminiError}</Text>
+        )}
+      </View>
+
+      {/* AI Toggle */}
+      <View style={styles.aiToggleContainer}>
+        <View style={styles.toggleRow}>
+          <Text style={styles.toggleLabel}>AI Generation (Secure)</Text>
+          <Switch
+            value={useAI}
+            onValueChange={(value) => {
+              if (value && !isBackendConfigured) {
+                showBackendSetupInfo();
+              } else {
+                setUseAI(value);
+              }
+            }}
+            trackColor={{ false: '#374151', true: '#059669' }}
+            thumbColor={useAI ? '#10B981' : '#9CA3AF'}
+          />
+        </View>
+        {useAI && !isBackendConfigured && (
+          <Pressable style={styles.setupButton} onPress={showBackendSetupInfo}>
+            <Text style={styles.setupButtonText}>� Setup Backend</Text>
+          </Pressable>
+        )}
+        {useAI && isBackendConfigured && !isBackendConnected && (
+          <Text style={styles.backendErrorText}>
+            ⚠️ Backend configured but not responding. Check your server.
+          </Text>
+        )}
+      </View>
+
+      <Text style={styles.subtitle}>Roll the dice of fate to discover your class!</Text>
+
+      <Pressable 
+        style={[
+          styles.button, 
+          { backgroundColor: (isLoading || hasGeneratedClass) ? '#4B5563' : '#059669' },
+          (isLoading || hasGeneratedClass) && styles.disabledButton
+        ]} 
+        onPress={rollRandomClass}
+        disabled={isLoading || hasGeneratedClass}
+      >
+        {isLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={[styles.buttonText, { marginLeft: 8 }]}>Generating Your Class...</Text>
+          </View>
+        ) : hasGeneratedClass ? (
+          <Text style={styles.buttonText}>✅ Class Generated!</Text>
+        ) : (
+          <Text style={styles.buttonText}>🎯 Generate My Class</Text>
+        )}
+      </Pressable>
+
+      {hasGeneratedClass && (
+        <View style={[styles.infoContainer, { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10B981' }]}>
+          <Text style={[styles.infoText, { color: '#10B981' }]}>
+            🎯 Your class has been generated! Navigate to "Your Class" to see your adventure role.
+          </Text>
+        </View>
+      )}
+      
+      {/* Chat Modal */}
+      <ChatModal 
+        visible={chatVisible} 
+        onClose={() => setChatVisible(false)} 
+      />
+      
+      {/* Menu Modal */}
+      <MenuModal 
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onChatPress={() => setChatVisible(true)}
+        onLogoutPress={signOut}
+      />
+    </View>
+  );
+}
+
+// Class Display Component
+function ClassDisplayComponent({ classData, onBack }) {
+  console.log('🎯 ClassDisplayComponent rendering with data:', classData);
+  
+  if (!classData) {
+    console.log('❌ No class data provided');
+    return (
+      <View style={[styles.container, { backgroundColor: '#0B0F1A' }]}>
+        <Text style={{ color: '#fff', textAlign: 'center', fontSize: 18 }}>
+          No class data available
+        </Text>
+        <Pressable style={styles.continueButton} onPress={onBack}>
+          <Text style={styles.continueButtonText}>Go Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  
+  const getRarityColor = (rarity) => {
+    const colors = {
+      Common: '#9CA3AF',
+      Uncommon: '#10B981', 
+      Rare: '#3B82F6',
+      Epic: '#8B5CF6',
+      Legendary: '#F59E0B',
+      Mythic: '#EF4444',
+      Eternal: '#EC4899'
+    };
+    return colors[rarity] || colors.Common;
+  };
+
+  console.log('🎯 About to render class display with rarity:', classData.rarity);
+  
+  return (
+    <View style={[styles.container, { backgroundColor: '#0B0F1A' }]}>
+      <Text style={{ color: '#fff', textAlign: 'center', fontSize: 20, marginTop: 50 }}>
+        Class Display Screen - DEBUG
+      </Text>
+      <Text style={{ color: '#fff', textAlign: 'center', fontSize: 16, margin: 20 }}>
+        Class: {classData.name || 'No name'}
+      </Text>
+      <View style={styles.classDisplayContainer}>
+        {/* Class Display Card */}
+        <View style={[styles.classCard, { borderColor: getRarityColor(classData.rarity) }]}>
+          
+          {/* Rarity Badge */}
+          <View style={[styles.rarityBadge, { backgroundColor: getRarityColor(classData.rarity) }]}>
+            <Text style={styles.rarityText}>{classData.rarity.toUpperCase()}</Text>
+          </View>
+
+          {/* Class Name */}
+          <Text style={styles.className}>{classData.name}</Text>
+
+          {/* Theme and Role */}
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailBadge}>
+              <Text style={styles.detailLabel}>THEME</Text>
+              <Text style={styles.detailValue}>{classData.theme}</Text>
+            </View>
+            
+            <View style={styles.detailBadge}>
+              <Text style={styles.detailLabel}>ROLE</Text>
+              <Text style={styles.detailValue}>{classData.role}</Text>
+            </View>
+          </View>
+
+          {/* Description */}
+          {classData.description && (
+            <View style={styles.descriptionContainer}>
+              <Text style={styles.descriptionText}>{classData.description}</Text>
+            </View>
+          )}
+
+        </View>
+
+        {/* Back Button */}
+        <Pressable style={styles.continueButton} onPress={onBack}>
+          <Text style={styles.continueButtonText}>Continue Adventure</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// Simple home screen for after authentication
+function SimpleHomeScreen() {
+  const { user, signOut } = useAuth();
+  const [showGame, setShowGame] = useState(false);
+
+  if (showGame) {
+    return <GameScreen onBack={() => setShowGame(false)} />;
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: '#0B0F1A' }]}>
+      <Text style={styles.title}>Welcome, {user?.username || user?.displayName || 'Traveler'}!</Text>
+      <Text style={styles.subtitle}>Choose your destiny and roll for adventure</Text>
+      
+      <Pressable style={styles.button} onPress={() => setShowGame(true)}>
+        <Text style={styles.buttonText}>🎲 Start Adventure</Text>
+      </Pressable>
+      
+      <Pressable style={[styles.button, styles.ghostButton]} onPress={signOut}>
+        <Text style={styles.ghostText}>Sign Out</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// Main app component that handles authentication state
+function AppContent() {
+  const { user, loading } = useAuth();
+
+  console.log('🔍 AppContent render:', { user: !!user, loading, userDetails: user?.uid });
+
+  if (loading) {
+    console.log('🔍 AppContent: Showing loading screen');
+    return <LoadingScreen />;
+  }
+
+  if (user) {
+    console.log('🔍 AppContent: User authenticated, showing home screen');
+    return <SimpleHomeScreen />;
+  } else {
+    console.log('� AppContent: No user, showing login screen');
+    return <SimpleLoginScreen />;
+  }
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <StatusBar style="light" />
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { 
+    flex: 1, 
+    backgroundColor: '#0B0F1A', 
+    padding: 20, 
+    justifyContent: 'center' 
+  },
+  title: { 
+    color: '#fff', 
+    fontSize: 28, 
+    fontWeight: '700', 
+    marginBottom: 32, 
+    textAlign: 'center' 
+  },
+  subtitle: {
+    color: '#9CA3AF',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 32
+  },
+  input: {
+    backgroundColor: '#121829',
+    color: '#fff',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#1E263B'
+  },
+  button: {
+    backgroundColor: '#6366F1',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginVertical: 6
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '700'
+  },
+  ghostButton: {
+    backgroundColor: 'transparent'
+  },
+  ghostText: {
+    color: '#9CA3AF',
+    fontWeight: '700'
+  },
+  secondaryButton: {
+    backgroundColor: '#374151'
+  },
+  error: {
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontSize: 14
+  },
+  disabledButton: {
+    opacity: 0.6
+  },
+  gameHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  backButton: {
+    backgroundColor: '#374151',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontWeight: '600'
+  },
+  hamburgerButton: {
+    padding: 12,
+    justifyContent: 'space-between',
+    height: 40,
+    width: 45,
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  hamburgerLine: {
+    height: 4,
+    width: '80%',
+    backgroundColor: '#fff',
+    borderRadius: 2,
+    marginVertical: 2,
+  },
+  sectionTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 24,
+    marginBottom: 12
+  },
+  classCard: {
+    backgroundColor: '#1F2937',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 16,
+    borderWidth: 1,
+    borderColor: '#374151'
+  },
+  className: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4
+  },
+  classRarity: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8
+  },
+  classDescription: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    lineHeight: 20
+  },
+  classListItem: {
+    backgroundColor: '#111827',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#1F2937'
+  },
+  classListName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  classListRarity: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4
+  },
+  classListDescription: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    lineHeight: 16
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0B0F1A'
+  },
+  loadingTitle: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '700',
+    marginBottom: 24,
+    textAlign: 'center'
+  },
+  loadingText: {
+    color: '#6366F1',
+    fontSize: 24,
+    fontWeight: '600',
+    textAlign: 'center',
+    minWidth: 120
+  },
+  dbStatusContainer: {
+    backgroundColor: '#1F2937',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#374151'
+  },
+  dbStatusContent: {
+    alignItems: 'center'
+  },
+  dbStatusText: {
+    color: '#10B981',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center'
+  },
+  dbStatusSubText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4
+  },
+  dbErrorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  aiToggleContainer: {
+    backgroundColor: '#1F2937',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#374151'
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  toggleLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  setupButton: {
+    backgroundColor: '#6366F1',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    alignItems: 'center'
+  },
+  setupButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  backendErrorText: {
+    color: '#F59E0B',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic'
+  },
+  classDisplayContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  classCard: {
+    width: '100%',
+    maxWidth: 400,
+    padding: 30,
+    borderRadius: 20,
+    borderWidth: 3,
+    alignItems: 'center',
+    marginBottom: 40,
+    backgroundColor: '#121829',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  rarityBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  rarityText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  className: {
+    fontSize: 32,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 38,
+    color: '#fff'
+  },
+  detailsContainer: {
+    width: '100%',
+    gap: 16,
+    marginBottom: 25,
+  },
+  detailBadge: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#0B0F1A'
+  },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 4,
+    color: '#9CA3AF'
+  },
+  detailValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff'
+  },
+  descriptionContainer: {
+    width: '100%',
+    padding: 20,
+    borderRadius: 12,
+    marginTop: 10,
+    backgroundColor: '#0B0F1A'
+  },
+  descriptionText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    color: '#fff'
+  },
+  continueButton: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    borderRadius: 12,
+    minWidth: 200,
+  },
+  continueButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  }
+});
