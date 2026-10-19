@@ -89,54 +89,134 @@ async function getRandomRoles(count = 1) {
   }
 }
 
+const STORY_TIMEOUT_MS = 40000;
+const STORY_RETRY_DELAY_MS = 1500;
+const STORY_HISTORY_TURNS = 12;
+
+class StoryError extends Error {
+  constructor(message, { retryable = false } = {}) {
+    super(message);
+    this.name = 'StoryError';
+    this.retryable = retryable;
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function readJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
 /**
- * Generate story content for RPG campaigns using secure backend
+ * POST a story request once. Throws StoryError with a player-friendly message;
+ * `retryable` marks failures worth one more attempt (network, timeout, 5xx).
+ */
+async function postStoryOnce(body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STORY_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(`${BACKEND_URL}/api/generate-story`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...body,
+        requestId: `story_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const timedOut = error && error.name === 'AbortError';
+    console.error('Story request failed:', error);
+    throw new StoryError(
+      timedOut ? 'The storyteller took too long to answer.' : 'Could not reach the storyteller. Check your connection.',
+      { retryable: true }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const data = await readJson(response);
+
+  if (!response.ok || !data.success) {
+    console.error('Story Generation API Error:', response.status, data);
+    if (response.status === 429) {
+      const wait = data.retryAfter || 30;
+      throw new StoryError(`The storyteller needs a moment. Try again in ${wait} seconds.`);
+    }
+    if (response.status === 422) {
+      throw new StoryError(data.error || 'The storyteller could not continue that. Try a different action.');
+    }
+    throw new StoryError(data.error || 'The storyteller lost the thread. Please try again.', {
+      retryable: response.status >= 500 || response.status === 408,
+    });
+  }
+
+  return data;
+}
+
+async function postStory(body) {
+  try {
+    return await postStoryOnce(body);
+  } catch (error) {
+    if (!(error instanceof StoryError) || !error.retryable) throw error;
+    await sleep(STORY_RETRY_DELAY_MS);
+    return postStoryOnce(body);
+  }
+}
+
+/**
+ * One story turn. The backend owns the narrator rules; we send game state.
+ *
+ * @param {Object}  turn
+ * @param {'intro'|'continue'} turn.mode
+ * @param {Object}  [turn.character]  { name, rarity, theme, role }
+ * @param {string}  [turn.identity]   free-text self description (Imagine screen)
+ * @param {Array}   [turn.history]    [{ role: 'player'|'narrator', text }], oldest first
+ * @param {string}  [turn.action]     the player's action (continue only)
+ * @returns {Promise<string>} the next passage of story
+ */
+export async function generateStoryTurn({ mode, character, identity, history = [], action }) {
+  if (!isBackendConfigured()) {
+    throw new StoryError('The storyteller is not configured yet.');
+  }
+
+  const data = await postStory({
+    mode,
+    character,
+    identity,
+    action,
+    history: history.slice(-STORY_HISTORY_TURNS),
+  });
+
+  if (typeof data.text !== 'string' || !data.text.trim()) {
+    // Backend predating `text` still returns the passage as a JSON string.
+    try {
+      const legacy = JSON.parse(data.story).story;
+      if (typeof legacy === 'string' && legacy.trim()) return legacy;
+    } catch {
+      // fall through
+    }
+    throw new StoryError('The storyteller lost the thread. Please try again.', { retryable: true });
+  }
+  return data.text;
+}
+
+/**
+ * Free-form story prompt (older call sites). Prefer generateStoryTurn.
+ * Resolves with the backend's JSON string: '{"story":"..."}'.
  */
 export async function generateStory(prompt) {
   if (!isBackendConfigured()) {
-    throw new Error('Backend not configured. Please set up your secure backend first.');
+    throw new StoryError('The storyteller is not configured yet.');
   }
-
-  try {
-    console.log('📚 Generating story via secure backend...');
-    
-    const response = await fetch(`${BACKEND_URL}/api/generate-story`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt,
-        requestId: `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Story Generation API Error:', response.status, errorData);
-      
-      if (response.status === 429) {
-        const errorJson = JSON.parse(errorData);
-        const retryAfter = errorJson.retryAfter || 30;
-        throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds and try again.`);
-      }
-      
-      throw new Error(`Backend Error: ${response.status} - ${errorData}`);
-    }
-
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error(data.error || 'Backend returned unsuccessful response');
-    }
-
-    console.log('✅ Story generated successfully');
-    return data.story;
-
-  } catch (error) {
-    console.error('❌ Error generating story:', error);
-    throw error;
-  }
+  const data = await postStory({ prompt });
+  return data.story;
 }
 
 /**

@@ -1,16 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, ScrollView, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import CalmButton from '../components/CalmButton';
 import CalmCard from '../components/CalmCard';
 import { calmTheme } from '../constants/calmTheme';
-import { generateStory } from '../services/gemini';
+import { generateStoryTurn } from '../services/gemini';
 import { playButtonClick, playConfirm } from '../services/calmSoundService';
+
+const toCharacter = (classData) => ({
+  name: classData.name,
+  rarity: classData.rarity,
+  theme: classData.theme?.name,
+  role: classData.role?.name,
+});
 
 export default function CampaignScreen({ route, navigation }) {
   const { classData } = route.params || {};
-  const [currentStory, setCurrentStory] = useState('');
   const [userAction, setUserAction] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState(null);
   const [gameState, setGameState] = useState({
     chapter: 1,
     companions: [],
@@ -19,11 +26,15 @@ export default function CampaignScreen({ route, navigation }) {
       experience: 0,
       level: 1,
     },
+    // [{ role: 'narrator' | 'player', text }] - sent back to the narrator every turn
     storyHistory: [],
   });
+  const startedRef = useRef(false);
+  const hasStory = gameState.storyHistory.length > 0;
 
   useEffect(() => {
-    if (classData) {
+    if (classData && !startedRef.current) {
+      startedRef.current = true;
       initializeCampaign();
     }
   }, [classData]);
@@ -31,71 +42,59 @@ export default function CampaignScreen({ route, navigation }) {
   const initializeCampaign = async () => {
     console.log('🎮 Starting campaign for:', classData.name);
     setIsGenerating(true);
+    setError(null);
 
     try {
-      const introPrompt = `
-        Create an immersive RPG story introduction for a ${classData.rarity} class character named "${classData.name}".
-        Character: ${classData.name} (${classData.rarity})
-        Theme: ${classData.theme?.name || 'Unknown'}
-        Role: ${classData.role?.name || 'Unknown'}
-        
-        Generate an engaging story introduction (max 75 words) that sets the scene.
-        Format as JSON: { "story": "The story text..." }
-      `;
-
-      const response = await generateStory(introPrompt);
-      const storyData = JSON.parse(response);
-      setCurrentStory(storyData.story);
+      const text = await generateStoryTurn({ mode: 'intro', character: toCharacter(classData) });
       setGameState(prev => ({
         ...prev,
-        storyHistory: [storyData.story],
+        storyHistory: [{ role: 'narrator', text }],
       }));
       await playConfirm(0.12);
-    } catch (error) {
-      console.error('❌ Error generating story:', error);
-      Alert.alert('Story Generation Failed', error.message);
-      setCurrentStory('The realm is quiet. Try continuing the adventure...');
+    } catch (err) {
+      console.error('❌ Error generating story:', err);
+      setError(err.message);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleUserAction = async () => {
-    if (!userAction.trim()) return;
+    const action = userAction.trim();
+    if (!action || isGenerating) return;
     setIsGenerating(true);
-    await playButtonClick(0.08);
+    setError(null);
 
     try {
-      const continuePrompt = `
-        Continue an RPG story based on user input.
-        Previous: ${currentStory.slice(-300)}
-        User: "${userAction}"
-        Character: ${classData.name}
-        Chapter: ${gameState.chapter}
-        
-        Generate a continuation (max 75 words) in JSON: { "story": "..." }
-      `;
+      await playButtonClick(0.08);
 
-      const response = await generateStory(continuePrompt);
-      const storyData = JSON.parse(response);
-      setCurrentStory(storyData.story);
+      const text = await generateStoryTurn({
+        mode: 'continue',
+        character: toCharacter(classData),
+        history: gameState.storyHistory,
+        action,
+      });
+
+      // Only clear the input once the turn succeeded, so a failure never eats the player's action.
       setUserAction('');
-
-      setGameState(prev => ({
-        ...prev,
-        chapter: prev.chapter + 1,
-        playerStats: {
-          ...prev.playerStats,
-          experience: prev.playerStats.experience + 10,
-          level: Math.floor((prev.playerStats.experience + 10) / 100) + 1,
-        },
-        storyHistory: [...prev.storyHistory, storyData.story],
-      }));
+      setGameState(prev => {
+        const experience = prev.playerStats.experience + 10;
+        return {
+          ...prev,
+          chapter: prev.chapter + 1,
+          playerStats: {
+            ...prev.playerStats,
+            experience,
+            level: Math.floor(experience / 100) + 1,
+          },
+          storyHistory: [...prev.storyHistory, { role: 'player', text: action }, { role: 'narrator', text }],
+        };
+      });
 
       await playConfirm(0.12);
-    } catch (error) {
-      console.error('Error continuing story:', error);
-      Alert.alert('Story Generation Failed', error.message);
+    } catch (err) {
+      console.error('Error continuing story:', err);
+      setError(err.message);
     } finally {
       setIsGenerating(false);
     }
@@ -142,10 +141,20 @@ export default function CampaignScreen({ route, navigation }) {
           </View>
         </CalmCard>
 
-        {/* Story Display */}
-        {currentStory && !isGenerating && (
+        {/* Story Log */}
+        {hasStory && (
           <CalmCard variant="primary" style={styles.storyCard}>
-            <Text style={styles.storyText}>{currentStory}</Text>
+            {gameState.storyHistory.map((entry, idx) => (
+              <Text
+                key={idx}
+                style={[
+                  entry.role === 'player' ? styles.playerText : styles.storyText,
+                  idx > 0 && styles.entrySpacing,
+                ]}
+              >
+                {entry.role === 'player' ? `You: ${entry.text}` : entry.text}
+              </Text>
+            ))}
           </CalmCard>
         )}
 
@@ -156,8 +165,20 @@ export default function CampaignScreen({ route, navigation }) {
           </CalmCard>
         )}
 
+        {/* Error */}
+        {error && !isGenerating && (
+          <CalmCard variant="secondary" style={styles.storyCard}>
+            <Text style={styles.errorText}>{error}</Text>
+            {!hasStory && (
+              <CalmButton onPress={initializeCampaign} variant="primary" size="md" fullWidth>
+                Try again
+              </CalmButton>
+            )}
+          </CalmCard>
+        )}
+
         {/* Action Input */}
-        {currentStory && (
+        {hasStory && (
           <CalmCard variant="secondary">
             <Text style={styles.actionTitle}>What do you do?</Text>
             <TextInput
@@ -272,6 +293,16 @@ const styles = StyleSheet.create({
     color: calmTheme.text.primary,
     fontWeight: '300',
   },
+  playerText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: calmTheme.accent.secondary,
+    fontStyle: 'italic',
+    fontWeight: '300',
+  },
+  entrySpacing: {
+    marginTop: calmTheme.spacing.md,
+  },
   loadingCard: {
     marginBottom: calmTheme.spacing.lg,
     paddingVertical: calmTheme.spacing.xl,
@@ -304,6 +335,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: calmTheme.accent.primary,
     marginBottom: calmTheme.spacing.lg,
+    textAlign: 'center',
   },
   bottomButtons: {
     marginTop: calmTheme.spacing.xl,
