@@ -176,6 +176,10 @@ app.post('/api/generate-class', rateLimit, async (req, res) => {
   }
 });
 
+// Story endpoint (same handler Vercel serves from api/generate-story.js)
+const generateStory = require('./api/generate-story');
+app.post('/api/generate-story', generateStory);
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -183,7 +187,8 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       health: '/api/health',
-      generateClass: '/api/generate-class'
+      generateClass: '/api/generate-class',
+      generateStory: '/api/generate-story'
     }
   });
 });

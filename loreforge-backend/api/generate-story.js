@@ -1,138 +1,100 @@
-const axios = require('axios');
+const { buildStoryRequest, ValidationError } = require('../lib/storyPrompt');
+const { generateStoryText, GeminiError } = require('../lib/gemini');
+const { createRateLimiter } = require('../lib/rateLimit');
 
-// Gemini API configuration
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+function createHandler({ generate = generateStoryText, limiter = createRateLimiter() } = {}) {
+  return async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-module.exports = async (req, res) => {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
 
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' });
+      return;
+    }
 
-  try {
-    let { prompt, requestId } = req.body;
-
-    if (!prompt) {
-      return res.status(400).json({
+    const limit = limiter(req);
+    if (!limit.ok) {
+      res.setHeader('Retry-After', String(limit.retryAfter));
+      res.status(429).json({
         success: false,
-        error: 'Prompt is required'
+        error: 'Too many requests. Please slow down.',
+        retryAfter: limit.retryAfter,
       });
+      return;
     }
 
     if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        success: false,
-        error: 'Gemini API key not configured'
-      });
+      res.status(500).json({ success: false, error: 'Gemini API key not configured' });
+      return;
     }
 
-    // Make prompt stricter for JSON-only output
-    prompt += '\n\nRespond ONLY with valid JSON. Do not include any text outside the JSON object.';
+    const body = req.body || {};
+    const requestId = typeof body.requestId === 'string' ? body.requestId.slice(0, 80) : undefined;
 
-    console.log(`📚 Generating story for request: ${requestId}`);
-
-    // Call Gemini API securely for story generation
-    const response = await axios.post(
-      `${GEMINI_API_URL}?key=${process.env.GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.8,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 400, // Limit output to ~75 words
-        }
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 45000 // Longer timeout for story generation
-      }
-    );
-
-    if (!response.data.candidates || response.data.candidates.length === 0) {
-      throw new Error('No response from Gemini API');
-    }
-
-    const generatedText = response.data.candidates[0].content.parts[0].text;
-
-    // Clean up the response
-    const cleanedText = generatedText
-      .replace(/```json\n?/gi, '')
-      .replace(/```\n?/gi, '')
-      .trim();
-
-    // Try to parse JSON and log raw response if it fails
+    let request;
     try {
-      JSON.parse(cleanedText);
-    } catch (parseError) {
-      console.error('❌ Failed to parse Gemini response as JSON:', cleanedText);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to parse story as JSON',
-        rawResponse: cleanedText,
-        details: parseError.message
-      });
+      request = buildStoryRequest(body);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        res.status(400).json({ success: false, error: error.message });
+        return;
+      }
+      throw error;
     }
 
-    console.log(`✅ Generated story for request: ${requestId}`);
+    try {
+      console.log(`📚 Generating story for request: ${requestId}`);
+      const text = await generate(request);
+      console.log(`✅ Generated story for request: ${requestId}`);
 
-    res.json({
-      success: true,
-      story: cleanedText,
-      requestId,
-      timestamp: new Date().toISOString()
-    });
+      res.json({
+        success: true,
+        text,
+        // Older app builds read `story` as a JSON string containing { story }.
+        story: JSON.stringify({ story: text }),
+        requestId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const upstream = error.response && error.response.status;
+      console.error(`❌ Error generating story: ${error.message}${upstream ? ` (Gemini HTTP ${upstream})` : ''}`);
 
-  } catch (error) {
-    console.error('❌ Error generating story:', error.message);
+      if (error.code === 'ECONNABORTED') {
+        res.status(408).json({ success: false, error: 'Request timeout - Gemini API took too long to respond' });
+        return;
+      }
+      if (upstream === 429) {
+        res.status(429).json({ success: false, error: 'Gemini API rate limit exceeded', retryAfter: 30 });
+        return;
+      }
+      if (upstream === 404 || upstream === 400) {
+        // Our request or model setting is wrong, not the player's. Check GEMINI_MODEL.
+        console.error('⚠️ Gemini rejected the request. Check the GEMINI_MODEL setting and API key.');
+        res.status(502).json({ success: false, error: 'The story service is misconfigured' });
+        return;
+      }
+      if (error instanceof GeminiError) {
+        res.status(error.status).json({
+          success: false,
+          error: error.status === 422 ? 'The storyteller could not continue that. Try a different action.' : 'The storyteller lost the thread. Please try again.',
+        });
+        return;
+      }
 
-    if (error.code === 'ECONNABORTED') {
-      return res.status(408).json({
+      res.status(500).json({
         success: false,
-        error: 'Request timeout - Gemini API took too long to respond'
+        error: 'Failed to generate story',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
+  };
+}
 
-    if (error.response && error.response.status === 429) {
-      return res.status(429).json({
-        success: false,
-        error: 'Gemini API rate limit exceeded',
-        retryAfter: 30
-      });
-    }
-
-    if (error.response && error.response.status === 400) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid request to Gemini API',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate story',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
+module.exports = createHandler();
+module.exports.createHandler = createHandler;
