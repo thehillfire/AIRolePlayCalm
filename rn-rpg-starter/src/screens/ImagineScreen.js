@@ -4,7 +4,7 @@ import CalmButton from '../components/CalmButton';
 import CalmCard from '../components/CalmCard';
 import CalmContainer from '../components/CalmContainer';
 import { calmTheme } from '../constants/calmTheme';
-import { generateStory } from '../services/gemini';
+import { generateStoryTurn } from '../services/gemini';
 import ChatModal from '../components/ChatModal';
 import MenuModal from '../components/MenuModal';
 import { playButtonClick, playConfirm } from '../services/calmSoundService';
@@ -17,43 +17,45 @@ export default function ImagineScreen() {
   const [userAction, setUserAction] = useState('');
   const [storyHistory, setStoryHistory] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
 
   const handleStart = async () => {
-    if (!identity.trim()) return;
+    if (!identity.trim() || isGenerating) return;
     setIsGenerating(true);
-    await playButtonClick(0.08);
+    setError(null);
 
     try {
-      const prompt = `You are ${identity}. Begin a short immersive story (max 75 words) introducing this character and their world. Respond ONLY with valid JSON: { "story": "..." }`;
-      const response = await generateStory(prompt);
-      const storyData = JSON.parse(response);
-      setCurrentStory(storyData.story);
-      setStoryHistory([`Identity: ${identity}`, storyData.story]);
+      await playButtonClick(0.08);
+      const text = await generateStoryTurn({ mode: 'intro', identity });
+      setCurrentStory(text);
+      setStoryHistory([{ role: 'narrator', text }]);
       await playConfirm(0.12);
-    } catch (error) {
-      setCurrentStory('The words are unclear. Try again...');
+    } catch (err) {
+      // Stay on the start screen so the player can retry without retyping.
+      setError(err.message);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleUserAction = async () => {
-    if (!userAction.trim()) return;
+    const action = userAction.trim();
+    if (!action || isGenerating) return;
     setIsGenerating(true);
-    await playButtonClick(0.08);
+    setError(null);
 
     try {
-      const prompt = `Continue the story for this character. Context: ${currentStory.slice(-500)}. User action: "${userAction}". Respond with a short continuation (max 75 words) in JSON: { "story": "..." }`;
-      const response = await generateStory(prompt);
-      const storyData = JSON.parse(response);
-      setStoryHistory([...storyHistory, `You: ${userAction}`, storyData.story]);
-      setCurrentStory(storyData.story);
+      await playButtonClick(0.08);
+      const text = await generateStoryTurn({ mode: 'continue', identity, history: storyHistory, action });
+      setStoryHistory([...storyHistory, { role: 'player', text: action }, { role: 'narrator', text }]);
+      setCurrentStory(text);
       setUserAction('');
       await playConfirm(0.12);
-    } catch (error) {
-      setCurrentStory('The path is uncertain. Try again...');
+    } catch (err) {
+      // Keep the current story and the typed action so the player can just press Continue again.
+      setError(err.message);
     } finally {
       setIsGenerating(false);
     }
@@ -109,6 +111,7 @@ export default function ImagineScreen() {
             >
               {isGenerating ? 'Creating...' : 'Begin Story'}
             </CalmButton>
+            {error && <Text style={styles.errorText}>{error}</Text>}
           </CalmCard>
         </ScrollView>
       ) : (
@@ -143,15 +146,21 @@ export default function ImagineScreen() {
             >
               {isGenerating ? 'Continuing...' : 'Continue'}
             </CalmButton>
+            {error && <Text style={styles.errorText}>{error}</Text>}
           </CalmCard>
 
           {/* Story History */}
           {storyHistory.length > 0 && (
             <CalmCard variant="tertiary" style={styles.historyCard}>
               <Text style={styles.historyTitle}>Your Journey</Text>
+              <View style={styles.historyEntry}>
+                <Text style={styles.historyText}>Identity: {identity}</Text>
+              </View>
               {storyHistory.map((entry, idx) => (
                 <View key={idx} style={styles.historyEntry}>
-                  <Text style={styles.historyText}>{entry}</Text>
+                  <Text style={styles.historyText}>
+                    {entry.role === 'player' ? `You: ${entry.text}` : entry.text}
+                  </Text>
                 </View>
               ))}
             </CalmCard>
@@ -224,6 +233,13 @@ const styles = StyleSheet.create({
     color: calmTheme.accent.primary,
     marginBottom: calmTheme.spacing.md,
     letterSpacing: 1,
+  },
+  errorText: {
+    marginTop: calmTheme.spacing.md,
+    fontSize: 13,
+    lineHeight: 20,
+    color: calmTheme.accent.primary,
+    textAlign: 'center',
   },
   historyEntry: {
     paddingVertical: calmTheme.spacing.sm,
